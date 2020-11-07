@@ -4,7 +4,7 @@ import com.atlassian.jira.jql.parser.JqlQueryParser
 import com.atlassian.jira.web.bean.PagerFilter
 
 import com.onresolve.scriptrunner.runner.rest.common.CustomEndpointDelegate
-import groovy.json.JsonBuilder
+import groovy.json.JsonOutput
 import groovy.transform.BaseScript
 
 import javax.servlet.http.HttpServletRequest
@@ -15,80 +15,68 @@ import java.sql.Timestamp
 
 class Epic {
     String key
-	double ptsTotal = 0
-	double ptsAccepted = 0
-	double ptsExcluded = 0
-	Timestamp lastUpdated
+    int ptsTotal = 0
+    int ptsAccepted = 0
+    int ptsExcluded = 0
+    Timestamp lastUpdated
 }
 
 @BaseScript CustomEndpointDelegate delegate
-getEpicRollups { queryParams, body, HttpServletRequest request ->
-	def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
-	def searchService = ComponentAccessor.getComponent(SearchService.class)
-	def issueManager = ComponentAccessor.getIssueManager()
-	def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+getEpicRollups(httpMethod: "GET", groups: ["users"]) { queryParams, body, HttpServletRequest request ->
+    def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
+    def searchService = ComponentAccessor.getComponent(SearchService.class)
+    def issueManager = ComponentAccessor.getIssueManager()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
     
-    Epic[] epics
+    def epics = []
 
-	String epicsquerystring = "issue type = Epic and customfield_10013 = Yes"
-	def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
-	def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
+    String epicsquerystring = "issuetype = Epic and 'Is CA PPM Task' = Yes"
+    def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
+    def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
 
-	Object storyPointsObj
-	def storyquerystring, storyquery, storyresults
-    double ptsStory
-
-	epicsresults.getResults().each {epicIssue ->
-	    Epic epic = new Epic()
-
-	    storyquerystring = "issueFunction in issuesInEpics('key = " + epicIssue.key + "') ORDER BY updated ASC"
-	    storyquery = jqlQueryParser.parseQuery(storyquerystring)
-	    storyresults = searchService.search(user, storyquery, PagerFilter.getUnlimitedFilter())
- 	    epic.key = epicIssue.getKey()
+    Object storyPointsObj
+    def storyquerystring, storyquery, storyresults
+    int ptsStory
     
- 	    storyresults.getResults().each {storyIssue ->
-        	storyPointsObj = storyIssue.getCustomFieldValue(ComponentAccessor.getCustomFieldManager().getCustomFieldObject(19430))
-        	if (storyPointsObj instanceof Number) {
- 		       	ptsStory = ((Number) storyPointsObj).doubleValue();
-        	} else {
-            	ptsStory = 0
-        	}
+    log.info('Epics query')
+
+    epicsresults.getResults().each {epicIssue ->
+        Epic epic = new Epic()
+
+        storyquerystring = "issueFunction in issuesInEpics('key = " + epicIssue.key + "') ORDER BY updated ASC"
+        storyquery = jqlQueryParser.parseQuery(storyquerystring)
+        storyresults = searchService.search(user, storyquery, PagerFilter.getUnlimitedFilter())
+        epic.key = epicIssue.getKey()
+    
+        storyresults.getResults().each {storyIssue ->
+            storyPointsObj = storyIssue.getCustomFieldValue(ComponentAccessor.getCustomFieldManager().getCustomFieldObject(10013))
+            if (storyPointsObj instanceof Number) {
+                ptsStory = (Integer) storyPointsObj
+            } else {
+                ptsStory = 0
+            }
         
-	    	if (storyIssue.getStatusId() == "Closed") {
-	        	epic.ptsAccepted = epic.ptsAccepted + ptsStory
-	   		}
-    
-			switch (storyIssue.getResolutionId()){
-	    		case "Won't Do":
-	    		case "Won't Fix":
-        		case "Duplicate":
-        		case "Incomplete":
-        		case "Cannot Reproduce":
-        		case "Under Advisement":
-        		case "Partner Issue": 
-         	   		epic.ptsExcluded = epic.ptsExcluded + ptsStory
-			}
+            if (storyIssue.getStatus().name == "Done") {
+                epic.ptsAccepted = epic.ptsAccepted + ptsStory
+            }
             
-        	epic.ptsTotal = epic.ptsTotal + ptsStory
-        	epic.lastUpdated = storyIssue.getUpdated()
-    	}
-    
-    	epics.plus(epic)
-	}
-    
-    JsonBuilder builder = new JsonBuilder()
-    
-    builder {
-        epics epics.collect {
-            [
-                Key: it.key(),
-                PointsTotal: it.ptsTotal(),
-                PointsAccepted: it.ptsAccepted(),
-                PointsExcluded: it.ptsExcluded(),
-                LastUpdated: it.lastUpdated()
-            ]
+            if (storyIssue.getResolution()){
+                switch (storyIssue.getResolution().name){
+                    case "Won't Do":
+                    case "Won't Fix":
+                    case "Duplicate":
+                    case "Incomplete":
+                    case "Cannot Reproduce":
+                    case "Under Advisement":
+                    case "Partner Issue": 
+                        epic.ptsExcluded = epic.ptsExcluded + ptsStory
+                }
+            }
+            
+            epic.ptsTotal = epic.ptsTotal + ptsStory
+            epic.lastUpdated = storyIssue.getUpdated()
         }
-    }
-    
-	return Response.ok(builder.toString()).build()
+        epics << epic
+    } 
+    return Response.ok(JsonOutput.toJson(epics)).build()
 }
