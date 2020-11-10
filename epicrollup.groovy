@@ -60,7 +60,7 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
                 ptsStory = 0
             }
         
-            if (storyIssue.getStatus().name == "Done") {
+            if (storyIssue.getStatus().name == "Closed") {
                 epic.ptsAccepted = epic.ptsAccepted + ptsStory
             }
             
