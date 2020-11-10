@@ -22,7 +22,7 @@ class Epic {
 }
 
 @BaseScript CustomEndpointDelegate delegate
-getEpicRollups(httpMethod: "GET", groups: ["users"]) { queryParams, body, HttpServletRequest request ->
+getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParams, String body, HttpServletRequest request ->
     def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
     def searchService = ComponentAccessor.getComponent(SearchService.class)
     def issueManager = ComponentAccessor.getIssueManager()
@@ -38,8 +38,12 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { queryParams, body, HttpSe
     def storyquerystring, storyquery, storyresults
     int ptsStory
     
-    log.info('Epics query')
-
+    Timestamp lastUpdated
+    
+    if (queryParams.getFirst("lastUpdated")) {
+        lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
+    }
+    
     epicsresults.getResults().each {epicIssue ->
         Epic epic = new Epic()
 
@@ -76,7 +80,10 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { queryParams, body, HttpSe
             epic.ptsTotal = epic.ptsTotal + ptsStory
             epic.lastUpdated = storyIssue.getUpdated()
         }
-        epics << epic
+        
+        if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
+            epics << epic
+        }
     } 
     return Response.ok(JsonOutput.toJson(epics)).build()
 }
