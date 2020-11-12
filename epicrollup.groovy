@@ -42,11 +42,9 @@ Epic getStoryPointsForEpic(String key) {
         } else {
             ptsStory = 0
         }
-        
         if (storyIssue.getStatus().name == "Closed") {
             epic.ptsAccepted = epic.ptsAccepted + ptsStory
-        }
-            
+        }   
         if (storyIssue.getResolution()) {
             switch (storyIssue.getResolution().name) {
                 case "Won't Do":
@@ -66,22 +64,32 @@ Epic getStoryPointsForEpic(String key) {
     return epic
 }
 
+void checkLastUpdated(Timestamp lastUpdated, boolean getNull, List<Epic> epics, Epic epic) {
+    if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
+        epics << epic
+    }
+    else if (getNull && !epic.lastUpdated)
+    {
+        epics << epic
+    }
+}
+
 @BaseScript CustomEndpointDelegate delegate
 getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParams, String body, HttpServletRequest request ->
-    def epics = []
+    List<Epic> epics = []
     
     Timestamp lastUpdated
+    boolean getNull = false
     
     if (queryParams.getFirst("lastUpdated")) {
         lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
-    }
-       
+    }    
+    if (queryParams.getFirst("null").toString() == "true") {
+        getNull = true
+    } 
     if (queryParams.getFirst("key")) {
-        Epic epic = getStoryPointsForEpic(queryParams.getFirst("key").toString())
-        
-        if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
-            epics << epic
-        }
+        Epic epic = getStoryPointsForEpic(queryParams.getFirst("key").toString())      
+        checkLastUpdated(lastUpdated, getNull, epics, epic)       
     } else {       
         def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
         def searchService = ComponentAccessor.getComponent(SearchService.class)
@@ -94,10 +102,7 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
         
         epicsresults.getResults().each { epicIssue ->
             Epic epic = getStoryPointsForEpic(epicIssue.getKey())
-            
-            if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
-                epics << epic
-            }
+            checkLastUpdated(lastUpdated, getNull, epics, epic)
         } 
     }
     return Response.ok(JsonOutput.toJson(epics)).build()
