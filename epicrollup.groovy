@@ -30,10 +30,6 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
     
     def epics = []
 
-    String epicsquerystring = "issuetype = Epic and 'Is CA PPM Task' = Yes"
-    def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
-    def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
-
     Object storyPointsObj
     def storyquerystring, storyquery, storyresults
     int ptsStory
@@ -43,6 +39,15 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
     if (queryParams.getFirst("lastUpdated")) {
         lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
     }
+    
+    def epicsquerystring = "issuetype = Epic and 'Is CA PPM Task' = Yes"
+    
+    if (queryParams.getFirst("key")) {
+        epicsquerystring = "key = " + queryParams.getFirst("key").toString() + " and 'Is CA PPM Task' = Yes"
+    }
+    
+    def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
+    def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
     
     epicsresults.getResults().each {epicIssue ->
         Epic epic = new Epic()
