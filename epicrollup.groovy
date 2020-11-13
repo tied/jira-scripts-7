@@ -102,6 +102,13 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
         
         epicsresults.getResults().each { epicIssue ->
             Epic epic = getStoryPointsForEpic(epicIssue.getKey())
+            
+            def epicLastUpdated = epicIssue.getUpdated()
+            if (!epic.lastUpdated || epicLastUpdated > epic.lastUpdated)
+            {
+                epic.lastUpdated = epicLastUpdated
+            }
+
             checkLastUpdated(lastUpdated, getNull, epics, epic)
         } 
     }
