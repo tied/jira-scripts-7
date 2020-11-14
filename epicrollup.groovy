@@ -64,12 +64,8 @@ Epic getStoryPointsForEpic(String key) {
     return epic
 }
 
-void checkLastUpdated(Timestamp lastUpdated, boolean getNull, List<Epic> epics, Epic epic) {
+void checkLastUpdated(Timestamp lastUpdated, List<Epic> epics, Epic epic) {
     if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
-        epics << epic
-    }
-    else if (getNull && !epic.lastUpdated)
-    {
         epics << epic
     }
 }
@@ -79,17 +75,13 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
     List<Epic> epics = []
     
     Timestamp lastUpdated
-    boolean getNull = false
     
     if (queryParams.getFirst("lastUpdated")) {
         lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
     }    
-    if (queryParams.getFirst("null").toString() == "true") {
-        getNull = true
-    } 
     if (queryParams.getFirst("key")) {
         Epic epic = getStoryPointsForEpic(queryParams.getFirst("key").toString())      
-        checkLastUpdated(lastUpdated, getNull, epics, epic)       
+        checkLastUpdated(lastUpdated, epics, epic)       
     } else {       
         def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
         def searchService = ComponentAccessor.getComponent(SearchService.class)
@@ -109,7 +101,7 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
                 epic.lastUpdated = epicLastUpdated
             }
 
-            checkLastUpdated(lastUpdated, getNull, epics, epic)
+            checkLastUpdated(lastUpdated, epics, epic)
         } 
     }
     return Response.ok(JsonOutput.toJson(epics)).build()
