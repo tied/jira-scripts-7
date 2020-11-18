@@ -2,6 +2,7 @@ import com.atlassian.jira.component.ComponentAccessor
 import com.atlassian.jira.bc.issue.search.SearchService
 import com.atlassian.jira.jql.parser.JqlQueryParser
 import com.atlassian.jira.web.bean.PagerFilter
+import com.atlassian.jira.workflow.TransitionOptions
 
 import com.onresolve.scriptrunner.runner.rest.common.CustomEndpointDelegate
 import groovy.json.JsonOutput
@@ -86,46 +87,57 @@ Epic getStoryPointsForEpic(String key) {
     return epic
 }
 
-void checkLastUpdated(Timestamp lastUpdated, List<Epic> epics, Epic epic) {
-    if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
-        epics << epic
-    }
-}
-
 @BaseScript CustomEndpointDelegate delegate
 getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParams, String body, HttpServletRequest request ->
     List<Epic> epics = []
-    
+
+    def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
+    def searchService = ComponentAccessor.getComponent(SearchService.class)
+    def issueManager = ComponentAccessor.getIssueManager()
+    def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
     Timestamp lastUpdated
+    def epicsquerystring
     
     if (queryParams.getFirst("lastUpdated")) {
         lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
     }
        
-    if (queryParams.getFirst("key")) {
-        Epic epic = getStoryPointsForEpic(queryParams.getFirst("key").toString())      
-        checkLastUpdated(lastUpdated, epics, epic)
+    if (queryParams.getFirst("key"))
+        epicsquerystring = "issuetype = Epic and key = " + queryParams.getFirst("key").toString()
+    else    
+        epicsquerystring = "issuetype = Epic and 'Is CA PPM Task' = Yes"
         
-    } else {       
-        def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
-        def searchService = ComponentAccessor.getComponent(SearchService.class)
-        def issueManager = ComponentAccessor.getIssueManager()
-        def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
+    def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
+    def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
         
-        def epicsquerystring = "issuetype = Epic and 'Is CA PPM Task' = Yes"
-        def epicsquery = jqlQueryParser.parseQuery(epicsquerystring)
-        def epicsresults = searchService.search(user, epicsquery, PagerFilter.getUnlimitedFilter())
+    epicsresults.getResults().each { epicIssue ->
+        Epic epic = getStoryPointsForEpic(epicIssue.getKey())
         
-        epicsresults.getResults().each { epicIssue ->
-            Epic epic = getStoryPointsForEpic(epicIssue.getKey())
+        def epicLastUpdated = epicIssue.getUpdated()
+        if (!epic.lastUpdated || epicLastUpdated > epic.lastUpdated)
+            epic.lastUpdated = epicLastUpdated
+        
+        if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
+            def workflow = ComponentAccessor.workflowManager.getWorkflow(epicIssue)
+			def actionId = workflow.allActions.findByName(epic.transition)?.id
+    		def issueLinkManager = ComponentAccessor.issueLinkManager
+            def issueService = ComponentAccessor.issueService
+			def issueInputParameters = issueService.newIssueInputParameters()
+
+			issueInputParameters.setComment('This Epic transitioned by getEpicsRollup service for Clarity integration based on child issue statuses')
+			issueInputParameters.setSkipScreenCheck(true)
             
-            def epicLastUpdated = epicIssue.getUpdated()
-            if (!epic.lastUpdated || epicLastUpdated > epic.lastUpdated)
-            {
-                epic.lastUpdated = epicLastUpdated
-            }
-            checkLastUpdated(lastUpdated, epics, epic)
-        } 
+            def transitionOptions = new TransitionOptions.Builder()
+    			.skipConditions()
+    			.skipPermissions()
+    			.skipValidators()
+    			.build()
+            
+            def transitionValidationResult = issueService.validateTransition(user, epicIssue.id, actionId, issueInputParameters, transitionOptions)
+            issueService.transition(user, transitionValidationResult)
+            
+            epics << epic
+        }
     }
     return Response.ok(JsonOutput.toJson(epics)).build()
 }
