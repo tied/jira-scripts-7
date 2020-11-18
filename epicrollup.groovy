@@ -18,6 +18,7 @@ class Epic {
     int ptsTotal = 0
     int ptsAccepted = 0
     int ptsExcluded = 0
+    String transition
     Timestamp lastUpdated
 }
 
@@ -28,6 +29,9 @@ Epic getStoryPointsForEpic(String key) {
     def user = ComponentAccessor.getJiraAuthenticationContext().getLoggedInUser()
     def storyquerystring, storyquery, storyresults
     int ptsStory
+    boolean isOpen = false
+    boolean isInProgress = false
+    boolean isClosed = false
     Object storyPointsObj
     
     Epic epic = new Epic()
@@ -42,9 +46,19 @@ Epic getStoryPointsForEpic(String key) {
         } else {
             ptsStory = 0
         }
-        if (storyIssue.getStatus().name == "Closed") {
-            epic.ptsAccepted = epic.ptsAccepted + ptsStory
-        }   
+         
+        switch (storyIssue.getStatus().name) {
+            case "Closed": 
+                epic.ptsAccepted = epic.ptsAccepted + ptsStory
+                isClosed = true
+                break
+            case "Open": 
+                isOpen = true
+                break
+            default:
+                isInProgress = true
+        }
+            
         if (storyIssue.getResolution()) {
             switch (storyIssue.getResolution().name) {
                 case "Won't Do":
@@ -61,6 +75,14 @@ Epic getStoryPointsForEpic(String key) {
         epic.ptsTotal = epic.ptsTotal + ptsStory
         epic.lastUpdated = storyIssue.getUpdated()
     }
+    
+    if (isInProgress || (isOpen && isClosed))
+    	epic.transition = "In Progress"
+    else if (!isOpen) 
+        epic.transition = "Close"
+    else 
+        epic.transition = "Open"
+    
     return epic
 }
 
@@ -78,10 +100,12 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
     
     if (queryParams.getFirst("lastUpdated")) {
         lastUpdated = Timestamp.valueOf(queryParams.getFirst("lastUpdated").toString())
-    }    
+    }
+       
     if (queryParams.getFirst("key")) {
         Epic epic = getStoryPointsForEpic(queryParams.getFirst("key").toString())      
-        checkLastUpdated(lastUpdated, epics, epic)       
+        checkLastUpdated(lastUpdated, epics, epic)
+        
     } else {       
         def jqlQueryParser = ComponentAccessor.getComponent(JqlQueryParser)
         def searchService = ComponentAccessor.getComponent(SearchService.class)
@@ -100,7 +124,6 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
             {
                 epic.lastUpdated = epicLastUpdated
             }
-
             checkLastUpdated(lastUpdated, epics, epic)
         } 
     }
