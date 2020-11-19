@@ -19,7 +19,7 @@ class Epic {
     int ptsTotal = 0
     int ptsAccepted = 0
     int ptsExcluded = 0
-    String transition
+    String status
     Timestamp lastUpdated
 }
 
@@ -78,11 +78,11 @@ Epic getStoryPointsForEpic(String key) {
     }
     
     if (isInProgress || (isOpen && isClosed))
-    	epic.transition = "In Progress"
+    	epic.status = "In Progress"
     else if (!isOpen) 
-        epic.transition = "Close"
+        epic.status = "Closed"
     else 
-        epic.transition = "Open"
+        epic.status = "Open"
     
     return epic
 }
@@ -118,24 +118,29 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
             epic.lastUpdated = epicLastUpdated
         
         if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
-            def workflow = ComponentAccessor.workflowManager.getWorkflow(epicIssue)
-			def actionId = workflow.allActions.findByName(epic.transition)?.id
-    		def issueLinkManager = ComponentAccessor.issueLinkManager
-            def issueService = ComponentAccessor.issueService
-			def issueInputParameters = issueService.newIssueInputParameters()
+            def epicStatus = epicIssue.getStatus().name
+            if (epicStatus != epic.status && epicStatus != "Launched") {
+            	def workflow = ComponentAccessor.workflowManager.getWorkflow(epicIssue)
+            	def status = epic.status
+            	if (epic.status ==  "Closed")
+            		status = "Close"
+				def actionId = workflow.allActions.findByName(status)?.id
+    			def issueLinkManager = ComponentAccessor.issueLinkManager
+            	def issueService = ComponentAccessor.issueService
+				def issueInputParameters = issueService.newIssueInputParameters()
 
-			issueInputParameters.setComment('This Epic transitioned by getEpicsRollup service for Clarity integration based on child issue statuses')
-			issueInputParameters.setSkipScreenCheck(true)
+				issueInputParameters.setComment('This Epic transitioned by getEpicsRollup service for Clarity integration based on child issue statuses')
+				issueInputParameters.setSkipScreenCheck(true)
             
-            def transitionOptions = new TransitionOptions.Builder()
-    			.skipConditions()
-    			.skipPermissions()
-    			.skipValidators()
-    			.build()
+            	def transitionOptions = new TransitionOptions.Builder()
+    				.skipConditions()
+    				.skipPermissions()
+    				.skipValidators()
+    				.build()
             
-            def transitionValidationResult = issueService.validateTransition(user, epicIssue.id, actionId, issueInputParameters, transitionOptions)
-            issueService.transition(user, transitionValidationResult)
-            
+            	def transitionValidationResult = issueService.validateTransition(user, epicIssue.id, actionId, issueInputParameters, transitionOptions)
+            	issueService.transition(user, transitionValidationResult)
+            }
             epics << epic
         }
     }
