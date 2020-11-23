@@ -1,6 +1,6 @@
 import os
 import json
-import requests
+import urllib3
 from datetime import datetime
 
 api_url = 'https://jira.rallyhealth.com/rest/troubleshooting/1.0/check'
@@ -16,29 +16,39 @@ def getHeader():
 
 def makeCall():
     headers = getHeader()
-    response = requests.get(api_url, headers=headers)
+    http = urllib3.PoolManager()
+    response = http.request('GET', api_url, headers=headers)
 
     if (response.status_code == 201 or response.status_code == 200 or response.status_code == 422):
         return json.loads(response.content.decode('utf-8'))
     else:
         print(response.content)
         return None
+    
+def lambda_handler(event, context):
+    response = makeCall()
+    if response is not None:
+        for status in response['statuses']:
+            if (status['isHealthy'] == False and status['completeKey'] not in excludedChecks):
+                error_timedate = datetime.fromtimestamp(status['time']/1000).strftime("%A, %B %d, %Y %I:%M:%S")
+                slack_text = '*' + status['name'] + ' Health Check Failed*\n*Reason:* ' + status['failureReason'] + '\n*Severity:* ' + status['severity']
+                slack_data = {'text': slack_text}
+                slack_response = http.request(
+                    'POST', webhook_url, data=json.dumps(slack_data),
+                    headers={'Content-Type': 'application/json'}
+                )
+    else:
+        slack_text = '*REST API Health Check returned HTTP error status*'
+        slack_data = {'text': slack_text}
+        slack_response = http.request(
+            'POST', webhook_url, data=json.dumps(slack_data),
+            headers={'Content-Type': 'application/json'}
+        )
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
 
-response = makeCall()
-if response is not None:
-    for status in response['statuses']:
-        if (status['isHealthy'] == False and status['completeKey'] not in excludedChecks):
-            error_timedate = datetime.fromtimestamp(status['time']/1000).strftime("%A, %B %d, %Y %I:%M:%S")
-            slack_text = '*' + status['name'] + ' Health Check Failed*\n*Reason:* ' + status['failureReason'] + '\n*Severity:* ' + status['severity']
-            slack_data = {'text': slack_text}
-            slack_response = requests.post(
-                webhook_url, data=json.dumps(slack_data),
-                headers={'Content-Type': 'application/json'}
-            )
-else:
-    slack_text = '*REST API Health Check returned HTTP error status*'
-    slack_data = {'text': slack_text}
-    slack_response = requests.post(
-        webhook_url, data=json.dumps(slack_data),
-        headers={'Content-Type': 'application/json'}
-    )
+
+
+
