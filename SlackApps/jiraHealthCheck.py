@@ -27,6 +27,7 @@ def makeCall():
     
 def lambda_handler(event, context):
     response = makeCall()
+    http = urllib3.PoolManager()
     if response is not None:
         for status in response['statuses']:
             if (status['isHealthy'] == False and status['completeKey'] not in excludedChecks):
