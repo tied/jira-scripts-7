@@ -119,7 +119,7 @@ getEpicRollups(httpMethod: "GET", groups: ["users"]) { MultivaluedMap queryParam
         
         if (!lastUpdated || (epic.lastUpdated > lastUpdated)) {
             def epicStatus = epicIssue.getStatus().name
-            if (epicStatus != epic.status && epicStatus != "Launched") {
+            if (1 == 0 && (epicStatus != epic.status && epicStatus != "Launched")) {
             	def workflow = ComponentAccessor.workflowManager.getWorkflow(epicIssue)
             	def status = epic.status
             	if (epic.status ==  "Closed")
