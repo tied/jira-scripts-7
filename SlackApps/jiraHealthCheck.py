@@ -6,8 +6,7 @@ from datetime import datetime
 api_url = 'https://jira.rallyhealth.com/rest/troubleshooting/1.0/check'
 webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
 myToken = os.environ.get('JIRA_API_KEY')
-#excludedChecks = ['com.atlassian.troubleshooting.plugin-jira:applinksStatusHealthCheck']
-excludedChecks = []
+excludedChecks = ['com.atlassian.troubleshooting.plugin-jira:applinksStatusHealthCheck']
 
 def getHeader():
     return {
