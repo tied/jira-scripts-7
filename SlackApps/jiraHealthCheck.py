@@ -20,8 +20,10 @@ def makeCall():
     response = http.request('GET', api_url, headers=headers)
 
     if (response.status == 201 or response.status == 200 or response.status == 422):
+        print('#JIRA_HEALTH_CHECK_SUCCESS')
         return json.loads(response.data.decode('utf-8'))
     else:
+        print('#JIRA_HEALTH_CHECK_FAILURE')
         print(response.status)
         return None
     
@@ -30,6 +32,7 @@ def lambda_handler(event, context):
     http = urllib3.PoolManager()
     if response is not None:
         for status in response['statuses']:
+            print(status['completeKey'] + ' >> ' + str(status['isHealthy']))
             if (status['isHealthy'] == False and status['completeKey'] not in excludedChecks):
                 error_timedate = datetime.fromtimestamp(status['time']/1000).strftime("%A, %B %d, %Y %I:%M:%S")
                 slack_text = '*' + status['name'] + ' Health Check Failed*\n*Reason:* ' + status['failureReason'] + '\n*Severity:* ' + status['severity']
@@ -43,9 +46,6 @@ def lambda_handler(event, context):
         slack_text = '*REST API Health Check returned HTTP error status*'
         slack_data = {'text': slack_text}
         slack_response = http.request(
-            'POST', webhook_url, data=json.dumps(slack_data),
+            'POST', webhook_url, body=json.dumps(slack_data),
             headers={'Content-Type': 'application/json'}
         )
-
-
-
