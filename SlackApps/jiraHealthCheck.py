@@ -1,7 +1,6 @@
 import os
 import json
 import urllib3
-from datetime import datetime
 
 api_url = 'https://jira.rallyhealth.com/rest/troubleshooting/1.0/check'
 webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
@@ -34,7 +33,6 @@ def lambda_handler(event, context):
         for status in response['statuses']:
             print(status['completeKey'] + ' >> ' + str(status['isHealthy']))
             if (status['isHealthy'] == False and status['completeKey'] not in excludedChecks):
-                error_timedate = datetime.fromtimestamp(status['time']/1000).strftime("%A, %B %d, %Y %I:%M:%S")
                 slack_text = '*' + status['name'] + ' Health Check Failed*\n*Reason:* ' + status['failureReason'] + '\n*Severity:* ' + status['severity']
                 slack_data = {'text': slack_text}
                 slack_response = http.request(
